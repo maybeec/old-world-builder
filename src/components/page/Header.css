@@ -174,3 +174,42 @@
 .header__sync-error {
   margin-left: 5px;
 }
+
+.header__login-buttons {
+  display: flex;
+  gap: 0;
+}
+
+.header__nc-hint {
+  font-size: 0.85rem;
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.header__nc-hint a {
+  color: var(--color-primary, #4caf50);
+}
+
+.header__nc-error {
+  color: var(--color-error, #e74c3c);
+  font-size: 0.85rem;
+  margin-top: 0.5rem;
+}
+
+.header__nc-cors-config {
+  font-size: 0.7rem;
+  color: #e0e0e0;
+  background: rgba(0, 0, 0, 0.45);
+  border-radius: 4px;
+  padding: 0.5rem;
+  overflow-x: auto;
+  white-space: pre;
+  margin-top: 0.5rem;
+  line-height: 1.4;
+}
+
+.header__sync-error--clickable {
+  cursor: pointer;
+  display: inline-flex;
+  margin-left: 5px;
+}

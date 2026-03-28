@@ -15,8 +15,18 @@ import {
   uploadLocalDataToDropbox,
   downloadRemoteDataFromDropbox,
 } from "../../utils/dropbox-auth-and-synchronization";
+import {
+  nextcloudLogin,
+  nextcloudLogout,
+  connectWithAppPassword,
+  getNextcloudSettingsUrl,
+  syncNextcloudLists,
+  uploadLocalDataToNextcloud,
+  downloadRemoteDataFromNextcloud,
+} from "../../utils/nextcloud-auth-and-synchronization";
 import { updateSetting } from "../../state/settings";
 import { updateLogin } from "../../state/login";
+import { updateNextcloudLogin } from "../../state/nextcloudLogin";
 
 import "./Header.css";
 
@@ -39,10 +49,17 @@ export const Header = ({
   const location = useLocation();
   const [showMenu, setShowMenu] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isNextcloudDialogOpen, setIsNextcloudDialogOpen] = useState(false);
+  const [nextcloudServerUrl, setNextcloudServerUrl] = useState("");
+  const [showAppPasswordForm, setShowAppPasswordForm] = useState(false);
+  const [ncLoginName, setNcLoginName] = useState("");
+  const [ncAppPassword, setNcAppPassword] = useState("");
   const dispatch = useDispatch();
   const { listId, unitId } = useParams();
   const { loginLoading, loggedIn, isSyncing, syncConflict, syncError } =
     useSelector((state) => state.login);
+  const { ncLoggedIn, ncLoginLoading, ncCorsError, ncIsSyncing, ncSyncConflict, ncSyncError } =
+    useSelector((state) => state.nextcloudLogin);
   const list = useSelector((state) =>
     state.lists.find(({ id }) => listId === id),
   );
@@ -51,6 +68,8 @@ export const Header = ({
   const hasLocalChanges =
     new Date(settings.lastChanged).getTime() >
     new Date(settings.lastSynced).getTime();
+  const isAnySyncing = isSyncing || ncIsSyncing;
+  const isAnyLoggedIn = loggedIn || ncLoggedIn;
   const handleMenuClick = () => {
     setShowMenu(!showMenu);
   };
@@ -93,10 +112,60 @@ export const Header = ({
   ];
   const navigation = hasMainNavigation ? navigationLinks : moreButton;
   const logout = () => {
-    localStorage.removeItem("owb.accessToken");
-    localStorage.removeItem("owb.refreshToken");
-    dispatch(updateLogin({ loggedIn: false }));
+    if (loggedIn) {
+      localStorage.removeItem("owb.accessToken");
+      localStorage.removeItem("owb.refreshToken");
+      dispatch(updateLogin({ loggedIn: false }));
+    } else if (ncLoggedIn) {
+      nextcloudLogout({ dispatch });
+    }
     setIsDialogOpen(false);
+  };
+
+  const resetNextcloudDialog = () => {
+    setNextcloudServerUrl("");
+    setShowAppPasswordForm(false);
+    setNcLoginName("");
+    setNcAppPassword("");
+    dispatch(updateNextcloudLogin({ ncLoginError: false, ncCorsError: false }));
+  };
+
+  const closeNextcloudDialog = () => {
+    setIsNextcloudDialogOpen(false);
+    resetNextcloudDialog();
+  };
+
+  const handleNextcloudConnect = () => {
+    if (!nextcloudServerUrl.trim()) return;
+
+    if (showAppPasswordForm) {
+      if (!ncLoginName.trim() || !ncAppPassword.trim()) return;
+      connectWithAppPassword({
+        dispatch,
+        serverUrl: nextcloudServerUrl.trim(),
+        loginName: ncLoginName.trim(),
+        appPassword: ncAppPassword.trim(),
+      });
+      setIsNextcloudDialogOpen(false);
+      resetNextcloudDialog();
+      return;
+    }
+
+    // Try Login Flow v2 first (works on any Nextcloud with CORS configured).
+    // On failure the dialog stays open and reveals the app-password form.
+    nextcloudLogin({
+      dispatch,
+      serverUrl: nextcloudServerUrl.trim(),
+      onSuccess: () => {
+        // Popup opened — close the dialog so it doesn't obscure the popup
+        setIsNextcloudDialogOpen(false);
+        resetNextcloudDialog();
+      },
+      onError: () => {
+        // CORS blocked or popup blocked — stay in dialog, show manual fallback
+        setShowAppPasswordForm(true);
+      },
+    });
   };
 
   useEffect(() => {
@@ -144,7 +213,108 @@ export const Header = ({
             icon="logout"
             spaceTop
           >
-            <FormattedMessage id="header.dropboxLogout" />
+            <FormattedMessage id={ncLoggedIn ? "header.nextcloudLogout" : "header.dropboxLogout"} />
+          </Button>
+        </div>
+      </Dialog>
+
+      <Dialog
+        open={isNextcloudDialogOpen}
+        onClose={closeNextcloudDialog}
+      >
+        <p>
+          <FormattedMessage id="header.nextcloudServerUrl" />
+        </p>
+        <input
+          type="url"
+          className="input"
+          value={nextcloudServerUrl}
+          onChange={(e) => {
+            setNextcloudServerUrl(e.target.value);
+            setShowAppPasswordForm(false);
+            dispatch(updateNextcloudLogin({ ncLoginError: false, ncCorsError: false }));
+          }}
+          onKeyDown={(e) => { if (e.key === "Enter") handleNextcloudConnect(); }}
+          placeholder="https://cloud.example.com"
+          disabled={ncLoginLoading}
+        />
+        {ncCorsError && (
+          <div className="header__nc-cors-error">
+            <p className="header__nc-error">
+              <FormattedMessage id="header.nextcloudCorsError" />
+            </p>
+            <pre className="header__nc-cors-config">{`# nginx — inside your Nextcloud server {} block:
+add_header 'Access-Control-Allow-Origin' '*' always;
+add_header 'Access-Control-Allow-Methods' 'GET, POST, PUT, DELETE, OPTIONS, MKCOL, PROPFIND' always;
+add_header 'Access-Control-Allow-Headers' 'Authorization, Content-Type, Depth' always;
+if ($request_method = OPTIONS) { return 204; }
+
+# Apache2 — inside your Nextcloud VirtualHost:
+<IfModule mod_headers.c>
+  Header always set Access-Control-Allow-Origin "*"
+  Header always set Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS, MKCOL, PROPFIND"
+  Header always set Access-Control-Allow-Headers "Authorization, Content-Type, Depth"
+</IfModule>
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteCond %{REQUEST_METHOD} OPTIONS
+  RewriteRule .* - [R=200,L]
+</IfModule>`}</pre>
+          </div>
+        )}
+        {showAppPasswordForm && (
+          <>
+            <p className="header__nc-hint">
+              <FormattedMessage id="header.nextcloudAppPasswordHint" />{" "}
+              <a
+                href={getNextcloudSettingsUrl(nextcloudServerUrl)}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <FormattedMessage id="header.nextcloudOpenSettings" />
+              </a>
+            </p>
+            <input
+              type="text"
+              className="input"
+              value={ncLoginName}
+              onChange={(e) => setNcLoginName(e.target.value)}
+              placeholder={intl.formatMessage({ id: "header.nextcloudLoginName" })}
+              autoComplete="username"
+            />
+            <input
+              type="password"
+              className="input"
+              value={ncAppPassword}
+              onChange={(e) => setNcAppPassword(e.target.value)}
+              placeholder={intl.formatMessage({ id: "header.nextcloudAppPassword" })}
+              autoComplete="current-password"
+              onKeyDown={(e) => { if (e.key === "Enter") handleNextcloudConnect(); }}
+            />
+          </>
+        )}
+        <div className="editor__delete-dialog">
+          <Button
+            type="text"
+            onClick={closeNextcloudDialog}
+            icon="close"
+            spaceTop
+            color="dark"
+          >
+            <FormattedMessage id="misc.cancel" />
+          </Button>
+          <Button
+            type="primary"
+            icon={ncLoginLoading ? "spinner" : "nextcloud"}
+            spaceTop
+            disabled={
+              ncLoginLoading ||
+              !nextcloudServerUrl.trim() ||
+              (showAppPasswordForm && (!ncLoginName.trim() || !ncAppPassword.trim()))
+            }
+            onClick={handleNextcloudConnect}
+          >
+            <FormattedMessage id={showAppPasswordForm ? "header.nextcloudAppPasswordConnect" : "header.nextcloudLogin"} />
           </Button>
         </div>
       </Dialog>
@@ -181,30 +351,64 @@ export const Header = ({
               />
             )}
             {!hasHomeButton && !isPreview && (
-              <Button
-                type="text"
-                onClick={() => {
-                  if (loggedIn) {
-                    setIsDialogOpen(true);
-                  } else {
-                    login({ dispatch });
-                  }
-                }}
-                label={
-                  loginLoading
-                    ? ""
-                    : intl.formatMessage({
-                        id: loggedIn
-                          ? "header.dropboxLogout"
-                          : "header.dropboxLogin",
-                      })
-                }
-                color="light"
-                icon={
-                  loginLoading ? "spinner" : loggedIn ? "logout" : "dropbox"
-                }
-                showLabelRight
-              />
+              <>
+                {loggedIn ? (
+                  <Button
+                    type="text"
+                    onClick={() => setIsDialogOpen(true)}
+                    label={intl.formatMessage({ id: "header.dropboxLogout" })}
+                    color="light"
+                    icon="logout"
+                    showLabelRight
+                  />
+                ) : ncLoggedIn ? (
+                  <Button
+                    type="text"
+                    onClick={() => setIsDialogOpen(true)}
+                    label={intl.formatMessage({ id: "header.nextcloudLogout" })}
+                    color="light"
+                    icon="logout"
+                    showLabelRight
+                  />
+                ) : (
+                  <div className="header__login-buttons">
+                    {loginLoading ? (
+                      <Button
+                        type="text"
+                        label={intl.formatMessage({ id: "header.dropboxLogin" })}
+                        color="light"
+                        icon="spinner"
+                      />
+                    ) : (
+                      <Button
+                        type="text"
+                        onClick={() => login({ dispatch })}
+                        label={intl.formatMessage({ id: "header.dropboxLogin" })}
+                        color="light"
+                        icon="dropbox"
+                        showLabelRight
+                      />
+                    )}
+                    {ncLoginLoading ? (
+                      <Button
+                        type="text"
+                        label={intl.formatMessage({ id: "header.nextcloudLogin" })}
+                        color="light"
+                        icon="spinner"
+                      />
+                    ) : (
+                      <Button
+                        type="text"
+                        onClick={() => setIsNextcloudDialogOpen(true)}
+                        label={intl.formatMessage({ id: "header.nextcloudLogin" })}
+                        color="light"
+                        icon="nextcloud"
+                        showLabelRight
+                      />
+                    )}
+                  </div>
+                )}
+              </>
             )}
           </>
         )}
@@ -218,7 +422,7 @@ export const Header = ({
                   </Link>
                   {!isSection && (
                     <>
-                      {loggedIn ? (
+                      {isAnyLoggedIn ? (
                         <>
                           <Button
                             type="text"
@@ -226,25 +430,39 @@ export const Header = ({
                             className="header__cloud-icon"
                             label={intl.formatMessage({ id: "header.sync" })}
                             icon={
-                              isSyncing
+                              isAnySyncing
                                 ? "sync"
                                 : hasLocalChanges
                                 ? "cloud-upload"
                                 : "cloud"
                             }
-                            disabled={isSyncing}
+                            disabled={isAnySyncing}
                             onClick={() => {
-                              syncLists({
-                                dispatch,
-                              });
+                              if (ncLoggedIn) {
+                                syncNextcloudLists({ dispatch });
+                              } else {
+                                syncLists({ dispatch });
+                              }
                             }}
                           />
-                          {syncError && (
-                            <Icon
-                              symbol="error"
-                              color="red"
-                              className="header__sync-error"
-                            />
+                          {(syncError || ncSyncError) && (
+                            ncCorsError ? (
+                              <span
+                                className="header__sync-error header__sync-error--clickable"
+                                onClick={() => setIsNextcloudDialogOpen(true)}
+                                role="button"
+                                tabIndex={0}
+                                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") setIsNextcloudDialogOpen(true); }}
+                              >
+                                <Icon symbol="error" color="red" />
+                              </span>
+                            ) : (
+                              <Icon
+                                symbol="error"
+                                color="red"
+                                className="header__sync-error"
+                              />
+                            )
                           )}
                         </>
                       ) : (
@@ -273,24 +491,26 @@ export const Header = ({
               {hasPointsError && <Icon symbol="error" color="red" />}
               {!isSection && (
                 <>
-                  {loggedIn ? (
+                  {isAnyLoggedIn ? (
                     <Button
                       type="text"
                       color="light"
                       className="header__cloud-icon"
                       label={intl.formatMessage({ id: "header.sync" })}
                       icon={
-                        isSyncing
+                        isAnySyncing
                           ? "sync"
                           : hasLocalChanges
                           ? "cloud-upload"
                           : "cloud"
                       }
-                      disabled={isSyncing}
+                      disabled={isAnySyncing}
                       onClick={() => {
-                        syncLists({
-                          dispatch,
-                        });
+                        if (ncLoggedIn) {
+                          syncNextcloudLists({ dispatch });
+                        } else {
+                          syncLists({ dispatch });
+                        }
                       }}
                     />
                   ) : (
@@ -448,6 +668,60 @@ export const Header = ({
                 spaceTop
                 onClick={() => {
                   dispatch(updateLogin({ syncConflict: false }));
+                }}
+              >
+                <FormattedMessage id="misc.cancel" />
+              </Button>
+            </div>
+          </Dialog>
+        )}
+        {!isSection && ncSyncConflict && (
+          <Dialog open={ncSyncConflict}>
+            <p>
+              <FormattedMessage id="header.syncConflict" />
+            </p>
+            <div className="header__sync-conflict-buttons">
+              <Button
+                type="primary"
+                icon="cloud-upload"
+                spaceTop
+                autoHeight
+                onClick={() => {
+                  uploadLocalDataToNextcloud({ dispatch, settings });
+                  dispatch(
+                    updateNextcloudLogin({
+                      ncIsSyncing: true,
+                      ncSyncConflict: false,
+                    }),
+                  );
+                }}
+              >
+                <FormattedMessage id="header.useLocal" />
+              </Button>
+              <Button
+                type="primary"
+                icon="cloud-download"
+                spaceTop
+                autoHeight
+                onClick={() => {
+                  downloadRemoteDataFromNextcloud({ dispatch });
+                  dispatch(
+                    updateNextcloudLogin({
+                      ncIsSyncing: true,
+                      ncSyncConflict: false,
+                    }),
+                  );
+                }}
+              >
+                <FormattedMessage id="header.useRemote" />
+              </Button>
+              <Button
+                type="text"
+                icon="close"
+                color="dark"
+                spaceTop
+                onClick={() => {
+                  dispatch(updateNextcloudLogin({ ncSyncConflict: false }));
                 }}
               >
                 <FormattedMessage id="misc.cancel" />

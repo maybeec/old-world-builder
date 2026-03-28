@@ -32,6 +32,10 @@ import {
   useDropboxAuthentication,
   syncLists,
 } from "./utils/dropbox-auth-and-synchronization";
+import {
+  useNextcloudAuthentication,
+  syncNextcloudLists,
+} from "./utils/nextcloud-auth-and-synchronization";
 
 import "./App.css";
 
@@ -39,13 +43,15 @@ let intervalId = null;
 let isWindowActive = true;
 const autoSyncLists = ({ dispatch }) => {
   intervalId = setInterval(() => {
-    // const settings = JSON.parse(localStorage.getItem("owb.settings"));
-    // const lastChanged = new Date(settings.lastChanged).getTime();
-    // const lastSynced = new Date(settings.lastSynced).getTime();
-
-    // if (lastChanged > lastSynced) {
     if (isWindowActive) {
-      syncLists({ dispatch });
+      // Read at tick time to avoid stale closure when provider changes
+      const isNextcloud =
+        localStorage.getItem("owb.nextcloud.appPassword") !== null;
+      if (isNextcloud) {
+        syncNextcloudLists({ dispatch });
+      } else {
+        syncLists({ dispatch });
+      }
     }
   }, 30000);
 };
@@ -65,6 +71,7 @@ export const App = () => {
   );
   const settings = useSelector((state) => state.settings);
   useDropboxAuthentication();
+  useNextcloudAuthentication();
 
   useEffect(() => {
     const localLists = localStorage.getItem("owb.lists");
