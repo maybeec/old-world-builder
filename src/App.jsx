@@ -32,20 +32,23 @@ import {
   useDropboxAuthentication,
   syncLists,
 } from "./utils/dropbox-auth-and-synchronization";
+import {
+  useNextcloudAuthentication,
+  syncNextcloudLists,
+} from "./utils/nextcloud-auth-and-synchronization";
 
 import "./App.css";
 
 let intervalId = null;
 let isWindowActive = true;
-const autoSyncLists = ({ dispatch }) => {
+const autoSyncLists = ({ dispatch, ncLoggedIn }) => {
   intervalId = setInterval(() => {
-    // const settings = JSON.parse(localStorage.getItem("owb.settings"));
-    // const lastChanged = new Date(settings.lastChanged).getTime();
-    // const lastSynced = new Date(settings.lastSynced).getTime();
-
-    // if (lastChanged > lastSynced) {
     if (isWindowActive) {
-      syncLists({ dispatch });
+      if (ncLoggedIn) {
+        syncNextcloudLists({ dispatch });
+      } else {
+        syncLists({ dispatch });
+      }
     }
   }, 30000);
 };
@@ -64,7 +67,9 @@ export const App = () => {
     window.matchMedia("(max-width: 1279px)").matches,
   );
   const settings = useSelector((state) => state.settings);
+  const { ncLoggedIn } = useSelector((state) => state.nextcloudLogin);
   useDropboxAuthentication();
+  useNextcloudAuthentication();
 
   useEffect(() => {
     const localLists = localStorage.getItem("owb.lists");
@@ -76,9 +81,9 @@ export const App = () => {
 
   useEffect(() => {
     if (settings.autoSync && !intervalId) {
-      autoSyncLists({ dispatch });
+      autoSyncLists({ dispatch, ncLoggedIn });
     }
-  }, [settings.autoSync, dispatch]);
+  }, [settings.autoSync, ncLoggedIn, dispatch]);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia("(max-width: 1279px)");

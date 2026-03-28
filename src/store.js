@@ -7,6 +7,7 @@ import errorsReducer from "./state/errors";
 import rulesIndexReducer from "./state/rules-index";
 import settingsReducer from "./state/settings";
 import loginReducer from "./state/login";
+import nextcloudLoginReducer from "./state/nextcloudLogin";
 
 export default configureStore({
   reducer: {
@@ -17,5 +18,6 @@ export default configureStore({
     rulesIndex: rulesIndexReducer,
     settings: settingsReducer,
     login: loginReducer,
+    nextcloudLogin: nextcloudLoginReducer,
   },
 });
