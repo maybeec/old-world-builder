@@ -4,10 +4,10 @@ import { useDispatch } from "react-redux";
 import { updateNextcloudLogin } from "../state/nextcloudLogin";
 import { setSettings, updateSetting } from "../state/settings";
 import { setLists } from "../state/lists";
-import { getSyncFile, getDataFile } from "./file";
 
-const DATA_FILE_PATH = "owb-data.json";
-const SYNC_FILE_PATH = "owb-sync.txt";
+const NC_FOLDER = "old-world-builder";
+const DATA_FILE_PATH = `${NC_FOLDER}/owb-data.json`;
+const SYNC_FILE_PATH = `${NC_FOLDER}/owb-sync.txt`;
 
 let ncIsSyncing = false;
 let pollInterval = null;
@@ -24,6 +24,19 @@ const getAuthHeader = (loginName, appPassword) =>
 
 const getWebDavUrl = (server, loginName, fileName) =>
   `${server}/remote.php/dav/files/${encodeURIComponent(loginName)}/${fileName}`;
+
+const ensureFolder = (server, loginName, appPassword) => {
+  const url = getWebDavUrl(server, loginName, NC_FOLDER);
+
+  return fetch(url, {
+    method: "MKCOL",
+    headers: {
+      Authorization: getAuthHeader(loginName, appPassword),
+    },
+  }).then(() => {
+    // 201 = created, 405 = already exists — both are fine
+  });
+};
 
 const uploadFile = (server, loginName, appPassword, fileName, content) => {
   const url = getWebDavUrl(server, loginName, fileName);
@@ -285,16 +298,22 @@ export const syncNextcloudLists = ({ dispatch }) => {
         const lastChanged = new Date().toString();
         const newSettings = { ...settings, lastChanged, lastSynced: lastChanged };
 
-        Promise.all([
-          uploadFile(server, loginName, appPassword, SYNC_FILE_PATH, lastChanged),
-          uploadFile(
-            server,
-            loginName,
-            appPassword,
-            DATA_FILE_PATH,
-            JSON.stringify({ lists: localLists, settings: newSettings }),
-          ),
-        ])
+        ensureFolder(server, loginName, appPassword)
+          .catch(() => {
+            // folder creation errors are non-fatal (may already exist)
+          })
+          .then(() =>
+            Promise.all([
+              uploadFile(server, loginName, appPassword, SYNC_FILE_PATH, lastChanged),
+              uploadFile(
+                server,
+                loginName,
+                appPassword,
+                DATA_FILE_PATH,
+                JSON.stringify({ lists: localLists, settings: newSettings }),
+              ),
+            ]),
+          )
           .then(() => {
             dispatch(updateNextcloudLogin({ ncIsSyncing: false }));
             ncIsSyncing = false;
