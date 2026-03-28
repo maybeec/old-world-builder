@@ -10,8 +10,6 @@ const DATA_FILE_PATH = `${NC_FOLDER}/owb-data.json`;
 const SYNC_FILE_PATH = `${NC_FOLDER}/owb-sync.txt`;
 
 let ncIsSyncing = false;
-let pollInterval = null;
-let loginPopup = null;
 
 const getCredentials = () => ({
   server: localStorage.getItem("owb.nextcloud.server"),
@@ -113,120 +111,9 @@ export const connectWithAppPassword = ({ dispatch, serverUrl, loginName, appPass
   );
 };
 
-export const nextcloudLogin = ({ dispatch, serverUrl, onPopupOpen }) => {
-  const normalizedServer = normalizeServerUrl(serverUrl);
-  // Clear any leftover poll from a previous login attempt
-  if (pollInterval !== null) {
-    clearInterval(pollInterval);
-    pollInterval = null;
-  }
-  if (loginPopup && !loginPopup.closed) {
-    loginPopup.close();
-  }
-
-  dispatch(
-    updateNextcloudLogin({
-      ncLoginLoading: true,
-      ncLoginError: false,
-    }),
-  );
-
-  fetch(`${normalizedServer}/index.php/login/v2`, {
-    method: "POST",
-  })
-    .then((response) => {
-      if (!response.ok) {
-        throw new Error(`Login flow init failed: ${response.status}`);
-      }
-      return response.json();
-    })
-    .then(({ login, poll }) => {
-      loginPopup = window.open(login, "_blank", "width=900,height=700");
-
-      if (!loginPopup) {
-        // Browser blocked the popup — inform user immediately
-        dispatch(
-          updateNextcloudLogin({ ncLoginLoading: false, ncLoginError: true }),
-        );
-        return;
-      }
-
-      // Popup opened — let the caller close the server-URL dialog
-      onPopupOpen?.();
-
-      let pollCount = 0;
-      const MAX_POLLS = 150;
-
-      pollInterval = setInterval(() => {
-        // Stop polling if user closed the popup before completing auth
-        if (loginPopup && loginPopup.closed) {
-          clearInterval(pollInterval);
-          pollInterval = null;
-          dispatch(
-            updateNextcloudLogin({ ncLoginLoading: false, ncLoginError: false }),
-          );
-          return;
-        }
-
-        if (++pollCount > MAX_POLLS) {
-          clearInterval(pollInterval);
-          pollInterval = null;
-          if (loginPopup && !loginPopup.closed) {
-            loginPopup.close();
-          }
-          dispatch(
-            updateNextcloudLogin({
-              ncLoginLoading: false,
-              ncLoginError: true,
-            }),
-          );
-          return;
-        }
-
-        fetch(poll.endpoint, {
-          method: "POST",
-          body: new URLSearchParams({ token: poll.token }),
-        })
-          .then((response) => {
-            if (response.status === 200) {
-              return response
-                .json()
-                .then(({ server, loginName, appPassword }) => {
-                  clearInterval(pollInterval);
-                  pollInterval = null;
-
-                  if (loginPopup && !loginPopup.closed) {
-                    loginPopup.close();
-                  }
-
-                  localStorage.setItem("owb.nextcloud.server", server);
-                  localStorage.setItem("owb.nextcloud.loginName", loginName);
-                  localStorage.setItem(
-                    "owb.nextcloud.appPassword",
-                    appPassword,
-                  );
-
-                  dispatch(
-                    updateNextcloudLogin({
-                      ncLoggedIn: true,
-                      ncLoginLoading: false,
-                      ncLoginError: false,
-                    }),
-                  );
-                });
-            }
-            // 404 = still waiting, keep polling
-          })
-          .catch(() => {
-            // transient network error during poll — keep trying
-          });
-      }, 2000);
-    })
-    .catch(() => {
-      dispatch(
-        updateNextcloudLogin({ ncLoginLoading: false, ncLoginError: true }),
-      );
-    });
+export const getNextcloudSettingsUrl = (serverUrl) => {
+  const server = normalizeServerUrl(serverUrl);
+  return `${server}/settings/user/security`;
 };
 
 export const nextcloudLogout = ({ dispatch }) => {

@@ -180,8 +180,12 @@
   gap: 0;
 }
 
-.header__nc-error {
-  color: var(--color-error, #e74c3c);
+.header__nc-hint {
   font-size: 0.85rem;
   margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.header__nc-hint a {
+  color: var(--color-primary, #4caf50);
 }
