@@ -89,9 +89,32 @@ export const useNextcloudAuthentication = () => {
   }, [dispatch]);
 };
 
-export const nextcloudLogin = ({ dispatch, serverUrl, onPopupOpen }) => {
-  const normalizedServer = serverUrl.replace(/\/$/, "");
+const normalizeServerUrl = (serverUrl) => {
+  const trimmed = serverUrl.trim().replace(/\/$/, "");
+  if (!/^https?:\/\//i.test(trimmed)) {
+    return `https://${trimmed}`;
+  }
+  return trimmed;
+};
 
+export const connectWithAppPassword = ({ dispatch, serverUrl, loginName, appPassword }) => {
+  const server = normalizeServerUrl(serverUrl);
+
+  localStorage.setItem("owb.nextcloud.server", server);
+  localStorage.setItem("owb.nextcloud.loginName", loginName.trim());
+  localStorage.setItem("owb.nextcloud.appPassword", appPassword.trim());
+
+  dispatch(
+    updateNextcloudLogin({
+      ncLoggedIn: true,
+      ncLoginLoading: false,
+      ncLoginError: false,
+    }),
+  );
+};
+
+export const nextcloudLogin = ({ dispatch, serverUrl, onPopupOpen }) => {
+  const normalizedServer = normalizeServerUrl(serverUrl);
   // Clear any leftover poll from a previous login attempt
   if (pollInterval !== null) {
     clearInterval(pollInterval);

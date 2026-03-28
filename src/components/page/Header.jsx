@@ -18,6 +18,7 @@ import {
 import {
   nextcloudLogin,
   nextcloudLogout,
+  connectWithAppPassword,
   syncNextcloudLists,
   uploadLocalDataToNextcloud,
   downloadRemoteDataFromNextcloud,
@@ -49,6 +50,9 @@ export const Header = ({
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isNextcloudDialogOpen, setIsNextcloudDialogOpen] = useState(false);
   const [nextcloudServerUrl, setNextcloudServerUrl] = useState("");
+  const [showAppPasswordForm, setShowAppPasswordForm] = useState(false);
+  const [ncLoginName, setNcLoginName] = useState("");
+  const [ncAppPassword, setNcAppPassword] = useState("");
   const dispatch = useDispatch();
   const { listId, unitId } = useParams();
   const { loginLoading, loggedIn, isSyncing, syncConflict, syncError } =
@@ -194,6 +198,9 @@ export const Header = ({
         onClose={() => {
           setIsNextcloudDialogOpen(false);
           setNextcloudServerUrl("");
+          setShowAppPasswordForm(false);
+          setNcLoginName("");
+          setNcAppPassword("");
           dispatch(updateNextcloudLogin({ ncLoginError: false }));
         }}
       >
@@ -213,9 +220,54 @@ export const Header = ({
           placeholder="https://cloud.example.com"
         />
         {ncLoginError && (
-          <p className="header__nc-error">
-            <FormattedMessage id="header.nextcloudLoginError" />
-          </p>
+          <>
+            <p className="header__nc-error">
+              <FormattedMessage id="header.nextcloudLoginError" />
+            </p>
+            {!showAppPasswordForm && (
+              <Button
+                type="text"
+                icon="nextcloud"
+                color="dark"
+                onClick={() => setShowAppPasswordForm(true)}
+              >
+                <FormattedMessage id="header.nextcloudAppPasswordFallback" />
+              </Button>
+            )}
+          </>
+        )}
+        {showAppPasswordForm && (
+          <>
+            <p>
+              <FormattedMessage id="header.nextcloudAppPasswordHint" />
+            </p>
+            <input
+              type="text"
+              className="input"
+              value={ncLoginName}
+              onChange={(e) => setNcLoginName(e.target.value)}
+              placeholder={intl.formatMessage({ id: "header.nextcloudLoginName" })}
+              autoComplete="username"
+            />
+            <input
+              type="password"
+              className="input"
+              value={ncAppPassword}
+              onChange={(e) => setNcAppPassword(e.target.value)}
+              placeholder={intl.formatMessage({ id: "header.nextcloudAppPassword" })}
+              autoComplete="current-password"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && ncLoginName && ncAppPassword) {
+                  connectWithAppPassword({ dispatch, serverUrl: nextcloudServerUrl, loginName: ncLoginName, appPassword: ncAppPassword });
+                  setIsNextcloudDialogOpen(false);
+                  setNextcloudServerUrl("");
+                  setShowAppPasswordForm(false);
+                  setNcLoginName("");
+                  setNcAppPassword("");
+                }
+              }}
+            />
+          </>
         )}
         <div className="editor__delete-dialog">
           <Button
@@ -223,6 +275,9 @@ export const Header = ({
             onClick={() => {
               setIsNextcloudDialogOpen(false);
               setNextcloudServerUrl("");
+              setShowAppPasswordForm(false);
+              setNcLoginName("");
+              setNcAppPassword("");
               dispatch(updateNextcloudLogin({ ncLoginError: false }));
             }}
             icon="close"
@@ -231,14 +286,33 @@ export const Header = ({
           >
             <FormattedMessage id="misc.cancel" />
           </Button>
-          <Button
-            type="primary"
-            icon="cloud"
-            spaceTop
-            onClick={handleNextcloudConnect}
-          >
-            <FormattedMessage id="header.nextcloudLogin" />
-          </Button>
+          {showAppPasswordForm ? (
+            <Button
+              type="primary"
+              icon="nextcloud"
+              spaceTop
+              disabled={!ncLoginName || !ncAppPassword}
+              onClick={() => {
+                connectWithAppPassword({ dispatch, serverUrl: nextcloudServerUrl, loginName: ncLoginName, appPassword: ncAppPassword });
+                setIsNextcloudDialogOpen(false);
+                setNextcloudServerUrl("");
+                setShowAppPasswordForm(false);
+                setNcLoginName("");
+                setNcAppPassword("");
+              }}
+            >
+              <FormattedMessage id="header.nextcloudAppPasswordConnect" />
+            </Button>
+          ) : (
+            <Button
+              type="primary"
+              icon="nextcloud"
+              spaceTop
+              onClick={handleNextcloudConnect}
+            >
+              <FormattedMessage id="header.nextcloudLogin" />
+            </Button>
+          )}
         </div>
       </Dialog>
 
@@ -294,7 +368,7 @@ export const Header = ({
                     showLabelRight
                   />
                 ) : (
-                  <>
+                  <div className="header__login-buttons">
                     {loginLoading ? (
                       <Button
                         type="text"
@@ -325,11 +399,11 @@ export const Header = ({
                         onClick={() => setIsNextcloudDialogOpen(true)}
                         label={intl.formatMessage({ id: "header.nextcloudLogin" })}
                         color="light"
-                        icon="cloud"
+                        icon="nextcloud"
                         showLabelRight
                       />
                     )}
-                  </>
+                  </div>
                 )}
               </>
             )}

@@ -174,3 +174,14 @@
 .header__sync-error {
   margin-left: 5px;
 }
+
+.header__login-buttons {
+  display: flex;
+  gap: 0;
+}
+
+.header__nc-error {
+  color: var(--color-error, #e74c3c);
+  font-size: 0.85rem;
+  margin-top: 0.5rem;
+}
