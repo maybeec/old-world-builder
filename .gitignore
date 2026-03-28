@@ -27,6 +27,9 @@ yarn-debug.log*
 yarn-error.log*
 .yarn
 
+# lock file for npm — project uses yarn
+package-lock.json
+
 # Sentry Config File
 .sentryclirc
 
