@@ -41,10 +41,13 @@ import "./App.css";
 
 let intervalId = null;
 let isWindowActive = true;
-const autoSyncLists = ({ dispatch, ncLoggedIn }) => {
+const autoSyncLists = ({ dispatch }) => {
   intervalId = setInterval(() => {
     if (isWindowActive) {
-      if (ncLoggedIn) {
+      // Read at tick time to avoid stale closure when provider changes
+      const isNextcloud =
+        localStorage.getItem("owb.nextcloud.appPassword") !== null;
+      if (isNextcloud) {
         syncNextcloudLists({ dispatch });
       } else {
         syncLists({ dispatch });
@@ -67,7 +70,6 @@ export const App = () => {
     window.matchMedia("(max-width: 1279px)").matches,
   );
   const settings = useSelector((state) => state.settings);
-  const { ncLoggedIn } = useSelector((state) => state.nextcloudLogin);
   useDropboxAuthentication();
   useNextcloudAuthentication();
 
@@ -81,9 +83,9 @@ export const App = () => {
 
   useEffect(() => {
     if (settings.autoSync && !intervalId) {
-      autoSyncLists({ dispatch, ncLoggedIn });
+      autoSyncLists({ dispatch });
     }
-  }, [settings.autoSync, ncLoggedIn, dispatch]);
+  }, [settings.autoSync, dispatch]);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia("(max-width: 1279px)");

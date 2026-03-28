@@ -19,8 +19,12 @@ const getCredentials = () => ({
   appPassword: localStorage.getItem("owb.nextcloud.appPassword"),
 });
 
-const getAuthHeader = (loginName, appPassword) =>
-  "Basic " + btoa(`${loginName}:${appPassword}`);
+// btoa() only handles Latin1 — encode via TextEncoder for full Unicode safety
+const getAuthHeader = (loginName, appPassword) => {
+  const bytes = new TextEncoder().encode(`${loginName}:${appPassword}`);
+  const binary = String.fromCharCode(...bytes);
+  return "Basic " + btoa(binary);
+};
 
 const getWebDavUrl = (server, loginName, fileName) =>
   `${server}/remote.php/dav/files/${encodeURIComponent(loginName)}/${fileName}`;
@@ -40,12 +44,15 @@ const ensureFolder = (server, loginName, appPassword) => {
 
 const uploadFile = (server, loginName, appPassword, fileName, content) => {
   const url = getWebDavUrl(server, loginName, fileName);
+  const contentType = fileName.endsWith(".json")
+    ? "application/json"
+    : "text/plain";
 
   return fetch(url, {
     method: "PUT",
     headers: {
       Authorization: getAuthHeader(loginName, appPassword),
-      "Content-Type": "text/plain",
+      "Content-Type": contentType,
     },
     body: content,
   }).then((response) => {
@@ -66,17 +73,6 @@ const downloadFile = (server, loginName, appPassword, fileName) => {
   });
 };
 
-const fileExists = (server, loginName, appPassword, fileName) => {
-  const url = getWebDavUrl(server, loginName, fileName);
-
-  return fetch(url, {
-    method: "GET",
-    headers: {
-      Authorization: getAuthHeader(loginName, appPassword),
-    },
-  }).then((response) => response.ok);
-};
-
 export const useNextcloudAuthentication = () => {
   const dispatch = useDispatch();
 
@@ -95,6 +91,15 @@ export const useNextcloudAuthentication = () => {
 
 export const nextcloudLogin = ({ dispatch, serverUrl }) => {
   const normalizedServer = serverUrl.replace(/\/$/, "");
+
+  // Clear any leftover poll from a previous login attempt
+  if (pollInterval !== null) {
+    clearInterval(pollInterval);
+    pollInterval = null;
+  }
+  if (loginPopup && !loginPopup.closed) {
+    loginPopup.close();
+  }
 
   dispatch(
     updateNextcloudLogin({
@@ -119,9 +124,17 @@ export const nextcloudLogin = ({ dispatch, serverUrl }) => {
       const MAX_POLLS = 150;
 
       pollInterval = setInterval(() => {
-        pollCount++;
+        // Stop polling if user closed the popup before completing auth
+        if (loginPopup && loginPopup.closed) {
+          clearInterval(pollInterval);
+          pollInterval = null;
+          dispatch(
+            updateNextcloudLogin({ ncLoginLoading: false, ncLoginError: false }),
+          );
+          return;
+        }
 
-        if (pollCount > MAX_POLLS) {
+        if (++pollCount > MAX_POLLS) {
           clearInterval(pollInterval);
           pollInterval = null;
           if (loginPopup && !loginPopup.closed) {
@@ -142,31 +155,36 @@ export const nextcloudLogin = ({ dispatch, serverUrl }) => {
         })
           .then((response) => {
             if (response.status === 200) {
-              return response.json().then(({ server, loginName, appPassword }) => {
-                clearInterval(pollInterval);
-                pollInterval = null;
+              return response
+                .json()
+                .then(({ server, loginName, appPassword }) => {
+                  clearInterval(pollInterval);
+                  pollInterval = null;
 
-                if (loginPopup && !loginPopup.closed) {
-                  loginPopup.close();
-                }
+                  if (loginPopup && !loginPopup.closed) {
+                    loginPopup.close();
+                  }
 
-                localStorage.setItem("owb.nextcloud.server", server);
-                localStorage.setItem("owb.nextcloud.loginName", loginName);
-                localStorage.setItem("owb.nextcloud.appPassword", appPassword);
+                  localStorage.setItem("owb.nextcloud.server", server);
+                  localStorage.setItem("owb.nextcloud.loginName", loginName);
+                  localStorage.setItem(
+                    "owb.nextcloud.appPassword",
+                    appPassword,
+                  );
 
-                dispatch(
-                  updateNextcloudLogin({
-                    ncLoggedIn: true,
-                    ncLoginLoading: false,
-                    ncLoginError: false,
-                  }),
-                );
-              });
+                  dispatch(
+                    updateNextcloudLogin({
+                      ncLoggedIn: true,
+                      ncLoginLoading: false,
+                      ncLoginError: false,
+                    }),
+                  );
+                });
             }
             // 404 = still waiting, keep polling
           })
           .catch(() => {
-            // network error during poll — keep trying
+            // transient network error during poll — keep trying
           });
       }, 2000);
     })
@@ -196,22 +214,16 @@ export const uploadLocalDataToNextcloud = ({ dispatch, settings }) => {
   const { server, loginName, appPassword } = getCredentials();
   const localLists = JSON.parse(localStorage.getItem("owb.lists")) || [];
 
-  uploadFile(
-    server,
-    loginName,
-    appPassword,
-    SYNC_FILE_PATH,
-    settings.lastChanged,
-  )
-    .then(() =>
-      uploadFile(
-        server,
-        loginName,
-        appPassword,
-        DATA_FILE_PATH,
-        JSON.stringify({ lists: localLists, settings }),
-      ),
-    )
+  Promise.all([
+    uploadFile(server, loginName, appPassword, SYNC_FILE_PATH, settings.lastChanged),
+    uploadFile(
+      server,
+      loginName,
+      appPassword,
+      DATA_FILE_PATH,
+      JSON.stringify({ lists: localLists, settings }),
+    ),
+  ])
     .then(() => {
       dispatch(
         updateNextcloudLogin({ ncIsSyncing: false, ncSyncConflict: false }),
@@ -287,20 +299,19 @@ export const syncNextcloudLists = ({ dispatch }) => {
   dispatch(updateNextcloudLogin({ ncIsSyncing: true, ncSyncError: false }));
   ncIsSyncing = true;
 
-  const localLists = JSON.parse(localStorage.getItem("owb.lists")) || [];
-
-  Promise.all([
-    fileExists(server, loginName, appPassword, SYNC_FILE_PATH),
-    fileExists(server, loginName, appPassword, DATA_FILE_PATH),
-  ])
-    .then(([syncExists, dataExists]) => {
-      if (!syncExists || !dataExists) {
+  // Download sync file — if 404 this is the first sync, otherwise use the content directly
+  // (avoids a separate existence-check request and the double-download that would cause)
+  downloadFile(server, loginName, appPassword, SYNC_FILE_PATH)
+    .then((response) => {
+      if (response.status === 404) {
+        // First sync: create folder and upload both files
+        const localLists = JSON.parse(localStorage.getItem("owb.lists")) || [];
         const lastChanged = new Date().toString();
         const newSettings = { ...settings, lastChanged, lastSynced: lastChanged };
 
-        ensureFolder(server, loginName, appPassword)
+        return ensureFolder(server, loginName, appPassword)
           .catch(() => {
-            // folder creation errors are non-fatal (may already exist)
+            // non-fatal: folder may already exist
           })
           .then(() =>
             Promise.all([
@@ -315,79 +326,63 @@ export const syncNextcloudLists = ({ dispatch }) => {
             ]),
           )
           .then(() => {
+            // Only update timestamps after confirmed upload
+            dispatch(
+              updateSetting({
+                lastChanged: newSettings.lastChanged,
+                lastSynced: newSettings.lastSynced,
+              }),
+            );
+            localStorage.setItem("owb.settings", JSON.stringify(newSettings));
             dispatch(updateNextcloudLogin({ ncIsSyncing: false }));
             ncIsSyncing = false;
-          })
-          .catch(() => {
-            dispatch(
-              updateNextcloudLogin({ ncIsSyncing: false, ncSyncError: true }),
-            );
-            ncIsSyncing = false;
           });
+      }
 
+      if (!response.ok) {
+        throw new Error(`Sync file fetch failed: ${response.status}`);
+      }
+
+      return response.text();
+    })
+    .then((syncContent) => {
+      // syncContent is undefined when coming from the 404 branch (already handled above)
+      if (syncContent === undefined) {
+        return;
+      }
+
+      const remoteLastChanged = new Date(syncContent).getTime();
+      const localLastChanged = new Date(settings.lastChanged).getTime() || 0;
+      const lastSynced = settings.lastSynced
+        ? new Date(settings.lastSynced).getTime()
+        : 0;
+
+      let syncConflict = false;
+
+      if (
+        lastSynced < remoteLastChanged &&
+        localLastChanged > remoteLastChanged
+      ) {
         dispatch(
-          updateSetting({
-            lastChanged: newSettings.lastChanged,
-            lastSynced: newSettings.lastSynced,
-          }),
+          updateNextcloudLogin({ ncSyncConflict: true, ncIsSyncing: false }),
         );
-        localStorage.setItem("owb.settings", JSON.stringify(newSettings));
+        syncConflict = true;
+        ncIsSyncing = false;
+      } else if (remoteLastChanged < localLastChanged) {
+        uploadLocalDataToNextcloud({ dispatch, settings });
+      } else if (remoteLastChanged > localLastChanged) {
+        downloadRemoteDataFromNextcloud({ dispatch });
       } else {
-        downloadFile(server, loginName, appPassword, SYNC_FILE_PATH)
-          .then((response) => {
-            if (!response.ok) {
-              throw new Error(`Sync file download failed: ${response.status}`);
-            }
-            return response.text();
-          })
-          .then((downloadedSyncFile) => {
-            const remoteLastChanged = new Date(downloadedSyncFile).getTime();
-            const localLastChanged =
-              new Date(settings.lastChanged).getTime() || 0;
-            const lastSynced = settings.lastSynced
-              ? new Date(settings.lastSynced).getTime()
-              : 0;
+        dispatch(updateNextcloudLogin({ ncIsSyncing: false }));
+        ncIsSyncing = false;
+      }
 
-            let syncConflict = false;
-
-            if (
-              lastSynced < remoteLastChanged &&
-              localLastChanged > remoteLastChanged
-            ) {
-              dispatch(
-                updateNextcloudLogin({
-                  ncSyncConflict: true,
-                  ncIsSyncing: false,
-                }),
-              );
-              syncConflict = true;
-              ncIsSyncing = false;
-            } else if (remoteLastChanged < localLastChanged) {
-              uploadLocalDataToNextcloud({ dispatch, settings });
-            } else if (remoteLastChanged > localLastChanged) {
-              downloadRemoteDataFromNextcloud({ dispatch });
-            } else {
-              dispatch(updateNextcloudLogin({ ncIsSyncing: false }));
-              ncIsSyncing = false;
-            }
-
-            if (!syncConflict) {
-              dispatch(updateSetting({ lastSynced: settings.lastChanged }));
-              localStorage.setItem(
-                "owb.settings",
-                JSON.stringify({
-                  ...settings,
-                  lastSynced: settings.lastChanged,
-                }),
-              );
-            }
-          })
-          .catch(() => {
-            dispatch(
-              updateNextcloudLogin({ ncIsSyncing: false, ncSyncError: true }),
-            );
-            ncIsSyncing = false;
-          });
+      if (!syncConflict) {
+        dispatch(updateSetting({ lastSynced: settings.lastChanged }));
+        localStorage.setItem(
+          "owb.settings",
+          JSON.stringify({ ...settings, lastSynced: settings.lastChanged }),
+        );
       }
     })
     .catch(() => {

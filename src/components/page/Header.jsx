@@ -226,7 +226,11 @@ export const Header = ({
 
       <Dialog
         open={isNextcloudDialogOpen}
-        onClose={() => setIsNextcloudDialogOpen(false)}
+        onClose={() => {
+          setIsNextcloudDialogOpen(false);
+          setNextcloudServerUrl("");
+          dispatch(updateNextcloudLogin({ ncLoginError: false }));
+        }}
       >
         <p>
           <FormattedMessage id="header.nextcloudServerUrl" />
@@ -251,7 +255,11 @@ export const Header = ({
         <div className="editor__delete-dialog">
           <Button
             type="text"
-            onClick={() => setIsNextcloudDialogOpen(false)}
+            onClick={() => {
+              setIsNextcloudDialogOpen(false);
+              setNextcloudServerUrl("");
+              dispatch(updateNextcloudLogin({ ncLoginError: false }));
+            }}
             icon="close"
             spaceTop
             color="dark"
