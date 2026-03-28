@@ -198,11 +198,18 @@
 
 .header__nc-cors-config {
   font-size: 0.7rem;
-  background: rgba(0, 0, 0, 0.15);
+  color: #e0e0e0;
+  background: rgba(0, 0, 0, 0.45);
   border-radius: 4px;
   padding: 0.5rem;
   overflow-x: auto;
   white-space: pre;
   margin-top: 0.5rem;
   line-height: 1.4;
+}
+
+.header__sync-error--clickable {
+  cursor: pointer;
+  display: inline-flex;
+  margin-left: 5px;
 }

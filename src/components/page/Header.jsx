@@ -238,7 +238,7 @@ export const Header = ({
           placeholder="https://cloud.example.com"
           disabled={ncLoginLoading}
         />
-        {ncCorsError && !showAppPasswordForm && (
+        {ncCorsError && (
           <div className="header__nc-cors-error">
             <p className="header__nc-error">
               <FormattedMessage id="header.nextcloudCorsError" />
@@ -247,9 +247,19 @@ export const Header = ({
 add_header 'Access-Control-Allow-Origin' '*' always;
 add_header 'Access-Control-Allow-Methods' 'GET, POST, PUT, DELETE, OPTIONS, MKCOL, PROPFIND' always;
 add_header 'Access-Control-Allow-Headers' 'Authorization, Content-Type, Depth' always;
-if ($request_method = OPTIONS) {
-    return 204;
-}`}</pre>
+if ($request_method = OPTIONS) { return 204; }
+
+# Apache2 — inside your Nextcloud VirtualHost:
+<IfModule mod_headers.c>
+  Header always set Access-Control-Allow-Origin "*"
+  Header always set Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS, MKCOL, PROPFIND"
+  Header always set Access-Control-Allow-Headers "Authorization, Content-Type, Depth"
+</IfModule>
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteCond %{REQUEST_METHOD} OPTIONS
+  RewriteRule .* - [R=200,L]
+</IfModule>`}</pre>
           </div>
         )}
         {showAppPasswordForm && (
@@ -264,11 +274,6 @@ if ($request_method = OPTIONS) {
                 <FormattedMessage id="header.nextcloudOpenSettings" />
               </a>
             </p>
-            {ncCorsError && (
-              <p className="header__nc-error">
-                <FormattedMessage id="header.nextcloudCorsError" />
-              </p>
-            )}
             <input
               type="text"
               className="input"
@@ -441,11 +446,23 @@ if ($request_method = OPTIONS) {
                             }}
                           />
                           {(syncError || ncSyncError) && (
-                            <Icon
-                              symbol="error"
-                              color="red"
-                              className="header__sync-error"
-                            />
+                            ncCorsError ? (
+                              <span
+                                className="header__sync-error header__sync-error--clickable"
+                                onClick={() => setIsNextcloudDialogOpen(true)}
+                                role="button"
+                                tabIndex={0}
+                                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") setIsNextcloudDialogOpen(true); }}
+                              >
+                                <Icon symbol="error" color="red" />
+                              </span>
+                            ) : (
+                              <Icon
+                                symbol="error"
+                                color="red"
+                                className="header__sync-error"
+                              />
+                            )
                           )}
                         </>
                       ) : (

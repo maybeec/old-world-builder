@@ -11,7 +11,7 @@
   "header.nextcloudLogin": "Nextcloud login",
   "header.nextcloudLogout": "Déconnexion Nextcloud",
   "header.nextcloudServerUrl": "Entrez l'URL de votre serveur Nextcloud :",
-  "header.nextcloudCorsError": "Votre serveur Nextcloud n'est pas configuré pour l'accès navigateur (CORS). Reconnectez-vous après avoir ajouté la configuration.",
+  "header.nextcloudCorsError": "Your Nextcloud server is blocking browser access (CORS). Add the configuration below to your web server, then retry the sync.",
   "header.nextcloudAuthError": "Nom d'utilisateur ou mot de passe d'application incorrect.",
   "header.nextcloudAppPasswordHint": "Créez un mot de passe d'application dans Nextcloud : Paramètres → Sécurité → Mots de passe d'application.",
   "header.nextcloudOpenSettings": "Ouvrir les paramètres Nextcloud",
