@@ -8,7 +8,7 @@
   "header.sync": "Synchronize",
   "header.dropboxLogin": "Dropbox login",
   "header.dropboxLogout": "Logout",
-  "header.nextcloudLogin": "Connect",
+  "header.nextcloudLogin": "Nextcloud login",
   "header.nextcloudLogout": "Nextcloud logout",
   "header.nextcloudServerUrl": "Enter your Nextcloud server URL:",
   "header.nextcloudLoginError": "Could not connect to Nextcloud. Please check the server URL and try again.",

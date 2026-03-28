@@ -89,7 +89,7 @@ export const useNextcloudAuthentication = () => {
   }, [dispatch]);
 };
 
-export const nextcloudLogin = ({ dispatch, serverUrl }) => {
+export const nextcloudLogin = ({ dispatch, serverUrl, onPopupOpen }) => {
   const normalizedServer = serverUrl.replace(/\/$/, "");
 
   // Clear any leftover poll from a previous login attempt
@@ -119,6 +119,17 @@ export const nextcloudLogin = ({ dispatch, serverUrl }) => {
     })
     .then(({ login, poll }) => {
       loginPopup = window.open(login, "_blank", "width=900,height=700");
+
+      if (!loginPopup) {
+        // Browser blocked the popup — inform user immediately
+        dispatch(
+          updateNextcloudLogin({ ncLoginLoading: false, ncLoginError: true }),
+        );
+        return;
+      }
+
+      // Popup opened — let the caller close the server-URL dialog
+      onPopupOpen?.();
 
       let pollCount = 0;
       const MAX_POLLS = 150;

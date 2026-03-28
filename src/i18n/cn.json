@@ -8,7 +8,7 @@
   "header.sync": "同步",
   "header.dropboxLogin": "Dropbox登录",
   "header.dropboxLogout": "登出",
-  "header.nextcloudLogin": "连接",
+  "header.nextcloudLogin": "Nextcloud 登录",
   "header.nextcloudLogout": "退出Nextcloud",
   "header.nextcloudServerUrl": "输入您的Nextcloud服务器URL：",
   "header.nextcloudLoginError": "无法连接到Nextcloud。请检查服务器URL后重试。",

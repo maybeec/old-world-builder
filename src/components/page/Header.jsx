@@ -47,7 +47,6 @@ export const Header = ({
   const location = useLocation();
   const [showMenu, setShowMenu] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [isProviderDialogOpen, setIsProviderDialogOpen] = useState(false);
   const [isNextcloudDialogOpen, setIsNextcloudDialogOpen] = useState(false);
   const [nextcloudServerUrl, setNextcloudServerUrl] = useState("");
   const dispatch = useDispatch();
@@ -128,8 +127,16 @@ export const Header = ({
     if (!nextcloudServerUrl.trim()) {
       return;
     }
-    setIsNextcloudDialogOpen(false);
-    nextcloudLogin({ dispatch, serverUrl: nextcloudServerUrl.trim() });
+    // Keep dialog open until popup actually appears (or error occurs),
+    // so errors have somewhere to render.
+    nextcloudLogin({
+      dispatch,
+      serverUrl: nextcloudServerUrl.trim(),
+      onPopupOpen: () => {
+        setIsNextcloudDialogOpen(false);
+        setNextcloudServerUrl("");
+      },
+    });
   };
 
   useEffect(() => {
@@ -178,48 +185,6 @@ export const Header = ({
             spaceTop
           >
             <FormattedMessage id={ncLoggedIn ? "header.nextcloudLogout" : "header.dropboxLogout"} />
-          </Button>
-        </div>
-      </Dialog>
-
-      <Dialog
-        open={isProviderDialogOpen}
-        onClose={() => setIsProviderDialogOpen(false)}
-      >
-        <p>
-          <FormattedMessage id="header.chooseProvider" />
-        </p>
-        <div className="editor__delete-dialog">
-          <Button
-            type="primary"
-            icon="dropbox"
-            spaceTop
-            onClick={() => {
-              setIsProviderDialogOpen(false);
-              login({ dispatch });
-            }}
-          >
-            Dropbox
-          </Button>
-          <Button
-            type="primary"
-            icon="cloud"
-            spaceTop
-            onClick={() => {
-              setIsProviderDialogOpen(false);
-              setIsNextcloudDialogOpen(true);
-            }}
-          >
-            Nextcloud
-          </Button>
-          <Button
-            type="text"
-            icon="close"
-            color="dark"
-            spaceTop
-            onClick={() => setIsProviderDialogOpen(false)}
-          >
-            <FormattedMessage id="misc.cancel" />
           </Button>
         </div>
       </Dialog>
@@ -310,36 +275,61 @@ export const Header = ({
             )}
             {!hasHomeButton && !isPreview && (
               <>
-                {isAnyLoggedIn ? (
+                {loggedIn ? (
                   <Button
                     type="text"
                     onClick={() => setIsDialogOpen(true)}
-                    label={intl.formatMessage({
-                      id: ncLoggedIn
-                        ? "header.nextcloudLogout"
-                        : "header.dropboxLogout",
-                    })}
+                    label={intl.formatMessage({ id: "header.dropboxLogout" })}
                     color="light"
                     icon="logout"
                     showLabelRight
                   />
-                ) : loginLoading || ncLoginLoading ? (
+                ) : ncLoggedIn ? (
                   <Button
                     type="text"
-                    label=""
+                    onClick={() => setIsDialogOpen(true)}
+                    label={intl.formatMessage({ id: "header.nextcloudLogout" })}
                     color="light"
-                    icon="spinner"
+                    icon="logout"
                     showLabelRight
                   />
                 ) : (
-                  <Button
-                    type="text"
-                    onClick={() => setIsProviderDialogOpen(true)}
-                    label={intl.formatMessage({ id: "header.chooseProvider" })}
-                    color="light"
-                    icon="cloud-off"
-                    showLabelRight
-                  />
+                  <>
+                    {loginLoading ? (
+                      <Button
+                        type="text"
+                        label={intl.formatMessage({ id: "header.dropboxLogin" })}
+                        color="light"
+                        icon="spinner"
+                      />
+                    ) : (
+                      <Button
+                        type="text"
+                        onClick={() => login({ dispatch })}
+                        label={intl.formatMessage({ id: "header.dropboxLogin" })}
+                        color="light"
+                        icon="dropbox"
+                        showLabelRight
+                      />
+                    )}
+                    {ncLoginLoading ? (
+                      <Button
+                        type="text"
+                        label={intl.formatMessage({ id: "header.nextcloudLogin" })}
+                        color="light"
+                        icon="spinner"
+                      />
+                    ) : (
+                      <Button
+                        type="text"
+                        onClick={() => setIsNextcloudDialogOpen(true)}
+                        label={intl.formatMessage({ id: "header.nextcloudLogin" })}
+                        color="light"
+                        icon="cloud"
+                        showLabelRight
+                      />
+                    )}
+                  </>
                 )}
               </>
             )}
