@@ -189,3 +189,20 @@
 .header__nc-hint a {
   color: var(--color-primary, #4caf50);
 }
+
+.header__nc-error {
+  color: var(--color-error, #e74c3c);
+  font-size: 0.85rem;
+  margin-top: 0.5rem;
+}
+
+.header__nc-cors-config {
+  font-size: 0.7rem;
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 4px;
+  padding: 0.5rem;
+  overflow-x: auto;
+  white-space: pre;
+  margin-top: 0.5rem;
+  line-height: 1.4;
+}

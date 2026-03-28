@@ -6,6 +6,7 @@ export const nextcloudLoginSlice = createSlice({
     ncLoggedIn: false,
     ncLoginLoading: true,
     ncLoginError: false,
+    ncCorsError: false,
     ncIsSyncing: false,
     ncSyncConflict: false,
     ncSyncError: false,

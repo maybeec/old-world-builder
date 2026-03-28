@@ -11,6 +11,8 @@
   "header.nextcloudLogin": "Nextcloud login",
   "header.nextcloudLogout": "Disconnetti Nextcloud",
   "header.nextcloudServerUrl": "Inserisci l'URL del tuo server Nextcloud:",
+  "header.nextcloudCorsError": "Il tuo server Nextcloud non è configurato per l'accesso dal browser (CORS). Riconnettiti dopo aver aggiunto la configurazione.",
+  "header.nextcloudAuthError": "Nome utente o password per app errati.",
   "header.nextcloudAppPasswordHint": "Crea una password per app in Nextcloud: Impostazioni → Sicurezza → Password per app.",
   "header.nextcloudOpenSettings": "Apri impostazioni Nextcloud",
   "header.nextcloudLoginName": "Nome utente",

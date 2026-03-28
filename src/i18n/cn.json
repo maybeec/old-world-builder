@@ -11,6 +11,8 @@
   "header.nextcloudLogin": "Nextcloud 登录",
   "header.nextcloudLogout": "退出Nextcloud",
   "header.nextcloudServerUrl": "输入您的Nextcloud服务器URL：",
+  "header.nextcloudCorsError": "您的Nextcloud服务器未配置浏览器访问(CORS)。添加配置后重新连接。",
+  "header.nextcloudAuthError": "用户名或应用密码错误。",
   "header.nextcloudAppPasswordHint": "在Nextcloud中创建应用密码：设置 → 安全 → 应用密码。",
   "header.nextcloudOpenSettings": "打开Nextcloud设置",
   "header.nextcloudLoginName": "用户名",

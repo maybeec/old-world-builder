@@ -97,20 +97,42 @@ const normalizeServerUrl = (serverUrl) => {
   return trimmed;
 };
 
+// "cors"  — network/CORS error (server not configured for browser access)
+// "auth"  — 401 Unauthorized (wrong credentials)
+// "ok"    — connected successfully
+const testWebDavConnection = (server, loginName, appPassword) => {
+  const url = `${server}/remote.php/dav/files/${encodeURIComponent(loginName)}/`;
+  return fetch(url, {
+    method: "PROPFIND",
+    headers: {
+      Authorization: getAuthHeader(loginName, appPassword),
+      Depth: "0",
+    },
+  })
+    .then((response) => (response.status === 401 ? "auth" : "ok"))
+    .catch(() => "cors");
+};
+
 export const connectWithAppPassword = ({ dispatch, serverUrl, loginName, appPassword }) => {
   const server = normalizeServerUrl(serverUrl);
+  const name = loginName.trim();
+  const pass = appPassword.trim();
 
-  localStorage.setItem("owb.nextcloud.server", server);
-  localStorage.setItem("owb.nextcloud.loginName", loginName.trim());
-  localStorage.setItem("owb.nextcloud.appPassword", appPassword.trim());
+  dispatch(updateNextcloudLogin({ ncLoginLoading: true, ncLoginError: false, ncCorsError: false }));
 
-  dispatch(
-    updateNextcloudLogin({
-      ncLoggedIn: true,
-      ncLoginLoading: false,
-      ncLoginError: false,
-    }),
-  );
+  testWebDavConnection(server, name, pass).then((result) => {
+    if (result === "ok") {
+      localStorage.setItem("owb.nextcloud.server", server);
+      localStorage.setItem("owb.nextcloud.loginName", name);
+      localStorage.setItem("owb.nextcloud.appPassword", pass);
+      dispatch(updateNextcloudLogin({ ncLoggedIn: true, ncLoginLoading: false }));
+    } else if (result === "auth") {
+      dispatch(updateNextcloudLogin({ ncLoginLoading: false, ncLoginError: true, ncCorsError: false }));
+    } else {
+      // CORS — server not configured for browser access
+      dispatch(updateNextcloudLogin({ ncLoginLoading: false, ncLoginError: false, ncCorsError: true }));
+    }
+  });
 };
 
 export const getNextcloudSettingsUrl = (serverUrl) => {
@@ -354,7 +376,7 @@ export const syncNextcloudLists = ({ dispatch }) => {
       }
 
       if (!response.ok) {
-        throw new Error(`Sync file fetch failed: ${response.status}`);
+        throw new Error(`${response.status}`);
       }
 
       return response.text();
@@ -399,17 +421,18 @@ export const syncNextcloudLists = ({ dispatch }) => {
         );
       }
     })
-    .catch(() => {
-      dispatch(
-        updateNextcloudLogin({
-          ncIsSyncing: false,
-          ncLoggedIn: false,
-          ncLoginLoading: false,
-        }),
-      );
+    .catch((err) => {
+      // Only clear credentials for explicit auth failures (401).
+      // Network/CORS errors must not log the user out.
+      const isAuthError = err && err.message && err.message.includes("401");
+      if (isAuthError) {
+        dispatch(updateNextcloudLogin({ ncIsSyncing: false, ncLoggedIn: false }));
+        localStorage.removeItem("owb.nextcloud.server");
+        localStorage.removeItem("owb.nextcloud.loginName");
+        localStorage.removeItem("owb.nextcloud.appPassword");
+      } else {
+        dispatch(updateNextcloudLogin({ ncIsSyncing: false, ncSyncError: true, ncCorsError: true }));
+      }
       ncIsSyncing = false;
-      localStorage.removeItem("owb.nextcloud.server");
-      localStorage.removeItem("owb.nextcloud.loginName");
-      localStorage.removeItem("owb.nextcloud.appPassword");
     });
 };

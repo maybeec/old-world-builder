@@ -58,7 +58,7 @@ export const Header = ({
   const { listId, unitId } = useParams();
   const { loginLoading, loggedIn, isSyncing, syncConflict, syncError } =
     useSelector((state) => state.login);
-  const { ncLoggedIn, ncLoginLoading, ncIsSyncing, ncSyncConflict, ncSyncError } =
+  const { ncLoggedIn, ncLoginLoading, ncCorsError, ncIsSyncing, ncSyncConflict, ncSyncError } =
     useSelector((state) => state.nextcloudLogin);
   const list = useSelector((state) =>
     state.lists.find(({ id }) => listId === id),
@@ -127,7 +127,7 @@ export const Header = ({
     setShowAppPasswordForm(false);
     setNcLoginName("");
     setNcAppPassword("");
-    dispatch(updateNextcloudLogin({ ncLoginError: false }));
+    dispatch(updateNextcloudLogin({ ncLoginError: false, ncCorsError: false }));
   };
 
   const closeNextcloudDialog = () => {
@@ -232,12 +232,26 @@ export const Header = ({
           onChange={(e) => {
             setNextcloudServerUrl(e.target.value);
             setShowAppPasswordForm(false);
-            dispatch(updateNextcloudLogin({ ncLoginError: false }));
+            dispatch(updateNextcloudLogin({ ncLoginError: false, ncCorsError: false }));
           }}
           onKeyDown={(e) => { if (e.key === "Enter") handleNextcloudConnect(); }}
           placeholder="https://cloud.example.com"
           disabled={ncLoginLoading}
         />
+        {ncCorsError && !showAppPasswordForm && (
+          <div className="header__nc-cors-error">
+            <p className="header__nc-error">
+              <FormattedMessage id="header.nextcloudCorsError" />
+            </p>
+            <pre className="header__nc-cors-config">{`# nginx — inside your Nextcloud server {} block:
+add_header 'Access-Control-Allow-Origin' '*' always;
+add_header 'Access-Control-Allow-Methods' 'GET, POST, PUT, DELETE, OPTIONS, MKCOL, PROPFIND' always;
+add_header 'Access-Control-Allow-Headers' 'Authorization, Content-Type, Depth' always;
+if ($request_method = OPTIONS) {
+    return 204;
+}`}</pre>
+          </div>
+        )}
         {showAppPasswordForm && (
           <>
             <p className="header__nc-hint">
@@ -250,6 +264,11 @@ export const Header = ({
                 <FormattedMessage id="header.nextcloudOpenSettings" />
               </a>
             </p>
+            {ncCorsError && (
+              <p className="header__nc-error">
+                <FormattedMessage id="header.nextcloudCorsError" />
+              </p>
+            )}
             <input
               type="text"
               className="input"
